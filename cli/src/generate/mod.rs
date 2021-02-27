@@ -1,10 +1,10 @@
+mod binding_files;
 mod build_tables;
 mod char_tree;
 mod dedup;
 mod grammars;
 mod nfa;
 mod node_types;
-mod npm_files;
 pub mod parse_grammar;
 mod prepare_grammar;
 mod render;
@@ -31,10 +31,6 @@ lazy_static! {
         .build()
         .unwrap();
 }
-
-const NEW_HEADER_PARTS: &[&'static str] = &["
-  const uint16_t *alias_map;
-  uint32_t state_count;"];
 
 struct GeneratedParser {
     c_code: String,
@@ -92,28 +88,9 @@ pub fn generate_parser_in_directory(
 
     if next_abi {
         write_file(&header_path.join("parser.h"), tree_sitter::PARSER_HEADER)?;
-    } else {
-        let mut header = tree_sitter::PARSER_HEADER.to_string();
-
-        for part in NEW_HEADER_PARTS.iter() {
-            let pos = header
-                .find(part)
-                .expect("Missing expected part of parser.h header");
-            header.replace_range(pos..(pos + part.len()), "");
-        }
-
-        write_file(&header_path.join("parser.h"), header)?;
     }
 
-    ensure_file(&repo_path.join("index.js"), || {
-        npm_files::index_js(&language_name)
-    })?;
-    ensure_file(&src_path.join("binding.cc"), || {
-        npm_files::binding_cc(&language_name)
-    })?;
-    ensure_file(&repo_path.join("binding.gyp"), || {
-        npm_files::binding_gyp(&language_name)
-    })?;
+    binding_files::generate_binding_files(&repo_path, &language_name)?;
 
     Ok(())
 }
@@ -223,12 +200,4 @@ fn write_file(path: &Path, body: impl AsRef<[u8]>) -> Result<()> {
     fs::write(path, body).map_err(Error::wrap(|| {
         format!("Failed to write {:?}", path.file_name().unwrap())
     }))
-}
-
-fn ensure_file<T: AsRef<[u8]>>(path: &PathBuf, f: impl Fn() -> T) -> Result<()> {
-    if path.exists() {
-        Ok(())
-    } else {
-        write_file(path, f().as_ref())
-    }
 }
