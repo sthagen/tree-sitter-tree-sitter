@@ -13,7 +13,7 @@ use std::mem::MaybeUninit;
 use std::os::raw::{c_char, c_void};
 use std::ptr::NonNull;
 use std::sync::atomic::AtomicUsize;
-use std::{char, fmt, hash, iter, ptr, slice, str, u16};
+use std::{char, error, fmt, hash, iter, ptr, slice, str, u16};
 
 /// The latest ABI version that is supported by the current version of the
 /// library.
@@ -134,10 +134,10 @@ pub struct QueryMatch<'a> {
 }
 
 /// A sequence of `QueryCapture`s within a `QueryMatch`.
-pub struct QueryCaptures<'a, T: AsRef<[u8]>> {
+pub struct QueryCaptures<'a, 'tree: 'a, T: AsRef<[u8]>> {
     ptr: *mut ffi::TSQueryCursor,
     query: &'a Query,
-    text_callback: Box<dyn FnMut(Node<'a>) -> T + 'a>,
+    text_callback: Box<dyn FnMut(Node<'tree>) -> T + 'a>,
 }
 
 /// A particular `Node` that has been captured with a particular name within a `Query`.
@@ -271,16 +271,6 @@ impl Language {
     }
 }
 
-impl fmt::Display for LanguageError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(
-            f,
-            "Incompatible language version {}. Expected minimum {}, maximum {}",
-            self.version, MIN_COMPATIBLE_LANGUAGE_VERSION, LANGUAGE_VERSION,
-        )
-    }
-}
-
 impl Parser {
     /// Create a new parser.
     pub fn new() -> Parser {
@@ -351,7 +341,7 @@ impl Parser {
                     };
                     callback(log_type, message);
                 }
-            };
+            }
 
             let raw_container = Box::into_raw(container);
 
@@ -462,7 +452,7 @@ impl Parser {
             let slice = text.as_ref().unwrap().as_ref();
             *bytes_read = slice.len() as u32;
             return slice.as_ptr() as *const c_char;
-        };
+        }
 
         let c_input = ffi::TSInput {
             payload: &mut payload as *mut (&mut F, Option<T>) as *mut c_void,
@@ -518,7 +508,7 @@ impl Parser {
             let slice = text.as_ref().unwrap().as_ref();
             *bytes_read = slice.len() as u32 * 2;
             slice.as_ptr() as *const c_char
-        };
+        }
 
         let c_input = ffi::TSInput {
             payload: &mut payload as *mut (&mut F, Option<T>) as *mut c_void,
@@ -573,7 +563,8 @@ impl Parser {
     /// ```text
     ///     ranges[i].end_byte <= ranges[i + 1].start_byte
     /// ```
-    /// If this requirement is not satisfied, method will panic.
+    /// If this requirement is not satisfied, method will return IncludedRangesError
+    /// error with an offset in the passed ranges slice pointing to a first incorrect range.
     pub fn set_included_ranges<'a>(
         &mut self,
         ranges: &'a [Range],
@@ -1587,7 +1578,7 @@ impl Query {
     }
 }
 
-impl QueryCursor {
+impl<'a> QueryCursor {
     /// Create a new cursor for executing a given query.
     ///
     /// The cursor stores the state that is needed to iteratively search for matches.
@@ -1606,12 +1597,12 @@ impl QueryCursor {
     /// Each match contains the index of the pattern that matched, and a list of captures.
     /// Because multiple patterns can match the same set of nodes, one match may contain
     /// captures that appear *before* some of the captures from a previous match.
-    pub fn matches<'a, T: AsRef<[u8]>>(
+    pub fn matches<'tree: 'a, T: AsRef<[u8]>>(
         &'a mut self,
         query: &'a Query,
-        node: Node<'a>,
-        mut text_callback: impl FnMut(Node<'a>) -> T + 'a,
-    ) -> impl Iterator<Item = QueryMatch<'a>> + 'a {
+        node: Node<'tree>,
+        mut text_callback: impl FnMut(Node<'tree>) -> T + 'a,
+    ) -> impl Iterator<Item = QueryMatch<'tree>> + 'a {
         let ptr = self.0.as_ptr();
         unsafe { ffi::ts_query_cursor_exec(ptr, query.ptr.as_ptr(), node.0) };
         std::iter::from_fn(move || loop {
@@ -1633,12 +1624,12 @@ impl QueryCursor {
     ///
     /// This is useful if don't care about which pattern matched, and just want a single,
     /// ordered sequence of captures.
-    pub fn captures<'a, T: AsRef<[u8]>>(
+    pub fn captures<'tree, T: AsRef<[u8]>>(
         &'a mut self,
         query: &'a Query,
-        node: Node<'a>,
-        text_callback: impl FnMut(Node<'a>) -> T + 'a,
-    ) -> QueryCaptures<'a, T> {
+        node: Node<'tree>,
+        text_callback: impl FnMut(Node<'tree>) -> T + 'a,
+    ) -> QueryCaptures<'a, 'tree, T> {
         let ptr = self.0.as_ptr();
         unsafe { ffi::ts_query_cursor_exec(ptr, query.ptr.as_ptr(), node.0) };
         QueryCaptures {
@@ -1732,8 +1723,8 @@ impl QueryProperty {
     }
 }
 
-impl<'a, T: AsRef<[u8]>> Iterator for QueryCaptures<'a, T> {
-    type Item = (QueryMatch<'a>, usize);
+impl<'a, 'tree: 'a, T: AsRef<[u8]>> Iterator for QueryCaptures<'a, 'tree, T> {
+    type Item = (QueryMatch<'tree>, usize);
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -1907,6 +1898,46 @@ fn predicate_error(row: usize, message: String) -> QueryError {
         message,
     }
 }
+
+impl fmt::Display for IncludedRangesError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Incorrect range by index: {}", self.0)
+    }
+}
+
+impl fmt::Display for LanguageError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Incompatible language version {}. Expected minimum {}, maximum {}",
+            self.version, MIN_COMPATIBLE_LANGUAGE_VERSION, LANGUAGE_VERSION,
+        )
+    }
+}
+
+impl fmt::Display for QueryError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Query error at {}:{}. {}{}",
+            self.row + 1,
+            self.column + 1,
+            match self.kind {
+                QueryErrorKind::Field => "Invalid field name ",
+                QueryErrorKind::NodeType => "Invalid node type ",
+                QueryErrorKind::Capture => "Invalid capture name ",
+                QueryErrorKind::Predicate => "Invalid predicate: ",
+                QueryErrorKind::Structure => "Impossible pattern:\n",
+                QueryErrorKind::Syntax => "Invalid syntax:\n",
+            },
+            self.message
+        )
+    }
+}
+
+impl error::Error for IncludedRangesError {}
+impl error::Error for LanguageError {}
+impl error::Error for QueryError {}
 
 unsafe impl Send for Language {}
 unsafe impl Send for Parser {}
