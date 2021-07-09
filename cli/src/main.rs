@@ -36,11 +36,12 @@ fn run() -> Result<()> {
     };
 
     let matches = App::new("tree-sitter")
-        .version(version.as_str())
-        .setting(AppSettings::SubcommandRequiredElseHelp)
         .author("Max Brunsfeld <maxbrunsfeld@gmail.com>")
         .about("Generates and tests parsers")
+        .version(version.as_str())
+        .setting(AppSettings::SubcommandRequiredElseHelp)
         .global_setting(AppSettings::ColoredHelp)
+        .global_setting(AppSettings::DeriveDisplayOrder)
         .global_setting(AppSettings::DisableHelpSubcommand)
         .subcommand(SubCommand::with_name("init-config").about("Generate a default config file"))
         .subcommand(
@@ -194,6 +195,12 @@ fn run() -> Result<()> {
 
     match matches.subcommand() {
         ("init-config", Some(_)) => {
+            if let Ok(Some(config_path)) = Config::find_config_file() {
+                return Err(anyhow!(
+                    "Remove your existing config file first: {}",
+                    config_path.to_string_lossy()
+                ));
+            }
             let mut config = Config::initial()?;
             config.add(tree_sitter_loader::Config::initial())?;
             config.add(tree_sitter_cli::highlight::ThemeConfig::default())?;
@@ -274,6 +281,11 @@ fn run() -> Result<()> {
                 .values_of("edits")
                 .map_or(Vec::new(), |e| e.collect());
             let cancellation_flag = util::cancel_on_stdin();
+
+            if debug {
+                // For augmenting debug logging in external scanners
+                env::set_var("TREE_SITTER_DEBUG", "1");
+            }
 
             let timeout = matches
                 .value_of("timeout")
@@ -406,11 +418,10 @@ fn run() -> Result<()> {
 
                 if let Some(highlight_config) = language_config.highlight_config(language)? {
                     let source = fs::read(path)?;
-                    let theme_config = config.get()?;
                     if html_mode {
                         highlight::html(
                             &loader,
-                            &theme_config,
+                            &theme_config.theme,
                             &source,
                             highlight_config,
                             quiet,
@@ -419,7 +430,7 @@ fn run() -> Result<()> {
                     } else {
                         highlight::ansi(
                             &loader,
-                            &theme_config,
+                            &theme_config.theme,
                             &source,
                             highlight_config,
                             time,
