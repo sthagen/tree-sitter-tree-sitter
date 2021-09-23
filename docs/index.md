@@ -63,6 +63,7 @@ Parsers for these languages are fairly complete:
 * [Vue](https://github.com/ikatyang/tree-sitter-vue)
 * [YAML](https://github.com/ikatyang/tree-sitter-yaml)
 * [WASM](https://github.com/wasm-lsp/tree-sitter-wasm)
+* [WGSL WebGPU Shading Language](https://github.com/mehmetoguzderin/tree-sitter-wgsl)
 
 Parsers for these languages are in development:
 
@@ -79,6 +80,7 @@ Parsers for these languages are in development:
 * [Scala](https://github.com/tree-sitter/tree-sitter-scala)
 * [Sourcepawn](https://github.com/nilshelmig/tree-sitter-sourcepawn)
 * [Swift](https://github.com/tree-sitter/tree-sitter-swift)
+* [Objective-C](https://github.com/jiyee/tree-sitter-objc)
 
 
 ### Talks on Tree-sitter
