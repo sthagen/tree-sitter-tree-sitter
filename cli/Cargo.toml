@@ -1,7 +1,7 @@
 [package]
 name = "tree-sitter-cli"
 description = "CLI tool for developing, testing, and using Tree-sitter parsers"
-version = "0.20.7"
+version = "0.20.8"
 authors = ["Max Brunsfeld <maxbrunsfeld@gmail.com>"]
 edition = "2021"
 license = "MIT"
@@ -37,11 +37,11 @@ serde = { version = "1.0.130", features = ["derive"] }
 smallbitvec = "2.5.1"
 tiny_http = "0.12.0"
 walkdir = "2.3"
-webbrowser = "0.5.1"
+webbrowser = "0.8.3"
 which = "4.1.0"
 
 [dependencies.tree-sitter]
-version = "0.20.3"
+version = "0.20.10"
 path = "../lib"
 
 [dependencies.tree-sitter-config]
@@ -69,6 +69,8 @@ version = "0.4.6"
 features = ["std"]
 
 [dev-dependencies]
+proc_macro = { path = "src/tests/proc_macro" }
+
 rand = "0.8"
 tempfile = "3"
 pretty_assertions = "0.7.2"
