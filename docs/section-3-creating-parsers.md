@@ -46,7 +46,7 @@ npm install --save nan
 npm install --save-dev tree-sitter-cli
 ```
 
-The last command will install the CLI into the `node_modules` folder in your working directory. An executable program called `tree-sitter` will be created inside of `node_modules/.bin/`. You may want to follow the Node.js convention of adding that folder to your your `PATH` so that you can easily run this program when working in this directory.
+The last command will install the CLI into the `node_modules` folder in your working directory. An executable program called `tree-sitter` will be created inside of `node_modules/.bin/`. You may want to follow the Node.js convention of adding that folder to your `PATH` so that you can easily run this program when working in this directory.
 
 ```sh
 # In your shell profile script
@@ -530,9 +530,7 @@ Grammars often contain multiple tokens that can match the same characters. For e
 
 1. **Context-Aware Lexing** - Tree-sitter performs lexing on-demand, during the parsing process. At any given position in a source document, the lexer only tries to recognize tokens that are *valid* at that position in the document.
 
-1. **Earliest Starting Position** - Tree-sitter will prefer tokens with an earlier starting position. This is most often seen with very permissive regular expressions similar to `/.*/`, which are greedy and will consume as much text as possible. In this example the regex would consume all text until hitting a newline - even if text on that line could be interpreted as a different token.
-
-1. **Explicit Lexical Precedence** - When the precedence functions described [above](#the-grammar-dsl) are used within the `token` function, the given precedence values serve as instructions to the lexer. If there are two valid tokens that match the characters at a given position in the document, Tree-sitter will select the one with the higher precedence.
+1. **Explicit Lexical Precedence** - When the precedence functions described [above](#the-grammar-dsl) are used within the `token` function like `token(prec(N, ...))`, the given precedence values serve as instructions to the lexer. If there are two valid tokens that match the characters at a given position in the document, Tree-sitter will select the one with the higher precedence.
 
 1. **Match Length** - If multiple valid tokens with the same precedence match the characters at a given position in a document, Tree-sitter will select the token that matches the [longest sequence of characters][longest-match].
 
