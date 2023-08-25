@@ -17,6 +17,9 @@ fn main() {
         }
     }
 
+    #[cfg(feature = "bindgen")]
+    generate_bindings();
+
     let src_path = Path::new("src");
     for entry in fs::read_dir(&src_path).unwrap() {
         let entry = entry.unwrap();
@@ -26,11 +29,50 @@ fn main() {
 
     cc::Build::new()
         .flag_if_supported("-std=c99")
-        .flag_if_supported("-Wno-unused-parameter")
+        .flag_if_supported("-fvisibility=hidden")
+        .flag_if_supported("-Wshadow")
         .include(src_path)
         .include("include")
         .file(src_path.join("lib.c"))
         .compile("tree-sitter");
+}
+
+#[cfg(feature = "bindgen")]
+fn generate_bindings() {
+    const HEADER_PATH: &str = "include/tree_sitter/api.h";
+
+    println!("cargo:rerun-if-changed={}", HEADER_PATH);
+
+    let no_copy = [
+        "TSInput",
+        "TSLanguage",
+        "TSLogger",
+        "TSLookaheadIterator",
+        "TSParser",
+        "TSTree",
+        "TSQuery",
+        "TSQueryCursor",
+        "TSQueryCapture",
+        "TSQueryMatch",
+        "TSQueryPredicateStep",
+    ];
+
+    let bindings = bindgen::Builder::default()
+        .header(HEADER_PATH)
+        .layout_tests(false)
+        .allowlist_type("^TS.*")
+        .allowlist_function("^ts_.*")
+        .allowlist_var("^TREE_SITTER.*")
+        .no_copy(no_copy.join("|"))
+        .generate()
+        .expect("Failed to generate bindings");
+
+    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let bindings_rs = out_dir.join("bindings.rs");
+
+    bindings.write_to_file(&bindings_rs).expect(&*format!(
+        "Failed to write bindings into path: {bindings_rs:?}"
+    ));
 }
 
 fn which(exe_name: impl AsRef<Path>) -> Option<PathBuf> {

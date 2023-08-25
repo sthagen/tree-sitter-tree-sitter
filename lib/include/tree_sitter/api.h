@@ -1,6 +1,10 @@
 #ifndef TREE_SITTER_API_H_
 #define TREE_SITTER_API_H_
 
+#ifdef __GNUC__
+#pragma GCC visibility push(default)
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -1161,6 +1165,10 @@ void ts_set_allocator(
 
 #ifdef __cplusplus
 }
+#endif
+
+#ifdef __GNUC__
+#pragma GCC visibility pop
 #endif
 
 #endif  // TREE_SITTER_API_H_
